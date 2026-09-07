@@ -26,7 +26,7 @@ silero-vad==6.2.1
 soundfile==0.14.0
 sympy==1.14.0
 threadpoolctl==3.6.0
-torch==2.8.0
+torch==2.13.0
 torchaudio==2.8.0
 tqdm==4.70.0
 typing-inspection==0.4.4
