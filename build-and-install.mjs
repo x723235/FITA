@@ -9,7 +9,7 @@ const root=JSON.parse(await readFile(path.join(project,'desktop/config.json'),'u
 console.log('FITA / verificando o app…');
 execFileSync(process.execPath,[path.join(project,'test/desktop.mjs')],{stdio:'inherit'});
 console.log('FITA / criando pacote…');
-const [bundleDir]=await packager({dir:project,out:path.join(root,'outputs'),name:'FITA',appBundleId:'local.rafael.fita',appVersion:'0.3.1',platform:'darwin',arch:'arm64',electronVersion:'44.2.0',overwrite:true,asar:false,prune:true,icon:path.join(project,'desktop/FITA.icns'),ignore:[/^\/data(?:\/|$)/,/^\/test(?:\/|$)/]});
+const [bundleDir]=await packager({dir:project,out:path.join(root,'outputs'),name:'FITA',appBundleId:'local.rafael.fita',appVersion:'0.3.2',platform:'darwin',arch:'arm64',electronVersion:'44.2.0',overwrite:true,asar:false,prune:true,icon:path.join(project,'desktop/FITA.icns'),ignore:[/^\/data(?:\/|$)/,/^\/test(?:\/|$)/]});
 const bundle=path.join(bundleDir,'FITA.app'),appRoot=path.join(bundle,'Contents/Resources/app');
 const support='/Users/rafael/Library/Application Support/FITA';
 await mkdir(path.join(support,'Engine'),{recursive:true});
