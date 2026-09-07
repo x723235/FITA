@@ -12,3 +12,8 @@ export function assignmentTargets(segments,labels,index,group){
  const seed=segments[index];if(!seed)throw Error('Trecho inválido');
  return segments.flatMap((s,i)=>i===index||(group&&/^SPEAKER_\d+$/.test(seed.speaker)&&s.speaker===seed.speaker&&!assignedName(labels,s,i))?[i]:[]);
 }
+
+// A suggestion only becomes an assignment after the person explicitly confirms it.
+export function similarSuggestionTargets(segments,labels,matches,name){
+ return segments.flatMap((segment,index)=>segment.speaker!=='UNASSIGNED'&&matches?.matches?.[segment.speaker]?.candidate===name&&!assignedName(labels,segment,index)?[index]:[]);
+}

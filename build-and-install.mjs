@@ -1,4 +1,4 @@
-import {packager} from '/Users/rafael/Documents/Codex/2026-09-06/any-x20/atlas/node_modules/@electron/packager/dist/index.js';
+import {packager} from '@electron/packager';
 import {readFile,writeFile,rename,rm,mkdir,copyFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
@@ -15,8 +15,8 @@ const support='/Users/rafael/Library/Application Support/FITA';
 await mkdir(path.join(support,'Engine'),{recursive:true});
 for(const file of ['transcribe.py','transcribe_whisper.py','render.py','speakers.py','voices.py','remember.py','requirements-asr.lock.txt','requirements-speakers.lock.txt'])await copyFile(path.join(project,'engine',file),path.join(support,'Engine',file));
 for(const file of ['correction-memory.json','voice-library.json']){const src=path.join(project,'engine',file),dest=path.join(support,'Engine',file);if(existsSync(src)&&!existsSync(dest))await copyFile(src,dest)}
-const config={workspace:root,dataDir:path.join(support,'Recordings'),scriptsDir:path.join(support,'Engine'),python:path.join(support,'Runtime/asr/bin/python'),diarPython:path.join(support,'Runtime/speakers/bin/python'),modelCache:path.join(support,'Models')};
-for(const target of [config.python,config.diarPython,config.modelCache,config.dataDir])if(!existsSync(target))throw Error('Runtime local ausente: '+target);
+const config={workspace:root,dataDir:path.join(support,'Recordings'),scriptsDir:path.join(support,'Engine'),python:path.join(support,'Runtime/asr/bin/python'),diarPython:path.join(support,'Runtime/speakers/bin/python'),ffmpeg:path.join(support,'Runtime/bin/ffmpeg'),modelCache:path.join(support,'Models')};
+for(const target of [config.python,config.diarPython,config.ffmpeg,config.modelCache,config.dataDir])if(!existsSync(target))throw Error('Runtime local ausente: '+target);
 await writeFile(path.join(appRoot,'desktop/config.json'),JSON.stringify(config,null,2));
 execFileSync('codesign',['--force','--deep','--sign','-',bundle],{stdio:'inherit'});
 execFileSync('codesign',['--verify','--deep','--strict',bundle],{stdio:'inherit'});

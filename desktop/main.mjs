@@ -1,4 +1,4 @@
-import {speakerLibrary,assignmentTargets} from './people.mjs';
+import {speakerLibrary,assignmentTargets,similarSuggestionTargets} from './people.mjs';
 import {app,BrowserWindow,ipcMain,dialog,Menu,powerSaveBlocker} from 'electron';
 import {readFile,writeFile,mkdir,copyFile,rename,stat} from 'node:fs/promises';
 import {existsSync,createReadStream} from 'node:fs';
@@ -13,10 +13,11 @@ const ROOT=process.env.FITA_WORKSPACE||config.workspace;
 const DATA=process.env.FITA_DATA||config.dataDir||path.join(ROOT,'outputs/fita/data');
 const SCRIPTS=process.env.FITA_SCRIPTS||config.scriptsDir||path.join(ROOT,'outputs/local-transcriber');
 if(config.modelCache&&!process.env.FITA_DATA)process.env.HF_HOME=config.modelCache;
-process.env.PATH=['/opt/homebrew/bin','/usr/local/bin',process.env.PATH].filter(Boolean).join(':');
 const PY=config.python||path.join(ROOT,'work/venv/bin/python');
 const DPY=config.diarPython||path.join(ROOT,'work/diarize-venv/bin/python');
-const FFMPEG='/opt/homebrew/bin/ffmpeg';
+const FFMPEG=config.ffmpeg||path.join(app.getPath('appData'),'FITA','Runtime','bin','ffmpeg');
+process.env.FITA_FFMPEG=FFMPEG;
+process.env.PATH=[path.dirname(FFMPEG),'/opt/homebrew/bin','/usr/local/bin',process.env.PATH].filter(Boolean).join(':');
 if(process.env.FITA_DATA)app.setPath('userData',path.join(DATA,'window'));
 let state={paused:false,jobs:[]};
 let win,child=null,active=null,locked=false,writeTail=Promise.resolve();
@@ -90,13 +91,14 @@ ipc('action',async({action,id})=>{
  await save();tick();
 });
 ipc('correct',async({id,index,text})=>{const j=find(id);if(j.status!=='done'||!Number.isInteger(index)||typeof text!=='string'||text.length>20000)throw Error('Correção inválida');const dir=jobDir(id),t=await json(path.join(dir,'transcript.json'));if(!t.segments[index])throw Error('Trecho inválido');const edits=await json(path.join(dir,'edits.json'),{});edits[index]={text,original:t.segments[index].text,at:new Date().toISOString()};await writeFile(path.join(dir,'edits.json'),JSON.stringify(edits,null,2));j.reviewed=false;await save();return edits});
-ipc('assign',async({id,index,name,group=false})=>{
+ipc('assign',async({id,index,name,group=false,similar=false})=>{
  const j=find(id);name=String(name||'').trim();const dir=jobDir(id),t=await json(path.join(dir,'transcript.json'));
  if(j.status!=='done'||!Number.isInteger(index)||!t?.segments[index]||!name||name.length>100)throw Error('Escolha um trecho e informe o nome da pessoa.');
- const segment=t.segments[index],file=path.join(dir,'labels.json'),labels=await json(file,[]);
- const targets=assignmentTargets(t.segments,labels,index,group);
- for(const i of targets){const s=t.segments[i];labels.push({index:i,name,start:s.start,end:s.end,confirmedAt:new Date().toISOString(),source:i===index?'manual_assignment':'confirmed_group',seedIndex:index})}
- await writeFile(file,JSON.stringify(labels,null,2));j.reviewed=false;await save();return {count:targets.length};
+ const segment=t.segments[index],file=path.join(dir,'labels.json'),labels=await json(file,[]),matches=await json(path.join(dir,'matches.json'),{matches:{}});
+ const targets=new Set(assignmentTargets(t.segments,labels,index,group));
+ if(similar)for(const i of similarSuggestionTargets(t.segments,labels,matches,name))targets.add(i);
+ for(const i of targets){const s=t.segments[i];const suggested=similar&&s.speaker!==segment.speaker&&matches.matches?.[s.speaker]?.candidate===name;labels.push({index:i,name,start:s.start,end:s.end,confirmedAt:new Date().toISOString(),source:i===index?'manual_assignment':suggested?'confirmed_similar_suggestion':'confirmed_group',seedIndex:index})}
+ await writeFile(file,JSON.stringify(labels,null,2));j.reviewed=false;await save();return {count:targets.size};
 });
 let voiceBusy=false;
 async function voiceProcess(args){await new Promise((resolve,reject)=>{const p=spawn(DPY,[path.join(SCRIPTS,'voices.py'),...args],{stdio:['ignore','pipe','pipe']});let msg='';p.stderr.on('data',x=>msg=(msg+x).slice(-2000));p.once('error',reject);p.on('close',c=>c===0?resolve():reject(Error(msg||'Não foi possível comparar vozes.')))})}

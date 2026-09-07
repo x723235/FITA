@@ -8,5 +8,10 @@
   "scripts": {
     "start": "electron .",
     "test": "node test/desktop.mjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@playwright/test": "1.63.0",
+    "electron": "44.2.0"
   }
 }
