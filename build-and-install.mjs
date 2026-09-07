@@ -1,0 +1,30 @@
+import {packager} from '/Users/rafael/Documents/Codex/2026-09-06/any-x20/atlas/node_modules/@electron/packager/dist/index.js';
+import {readFile,writeFile,rename,rm,mkdir,copyFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const project=path.dirname(fileURLToPath(import.meta.url));
+const root=JSON.parse(await readFile(path.join(project,'desktop/config.json'),'utf8')).workspace;
+console.log('FITA / verificando o app…');
+execFileSync(process.execPath,[path.join(project,'test/desktop.mjs')],{stdio:'inherit'});
+console.log('FITA / criando pacote…');
+const [bundleDir]=await packager({dir:project,out:path.join(root,'outputs'),name:'FITA',appBundleId:'local.rafael.fita',appVersion:'0.3.1',platform:'darwin',arch:'arm64',electronVersion:'44.2.0',overwrite:true,asar:false,prune:true,icon:path.join(project,'desktop/FITA.icns'),ignore:[/^\/data(?:\/|$)/,/^\/test(?:\/|$)/]});
+const bundle=path.join(bundleDir,'FITA.app'),appRoot=path.join(bundle,'Contents/Resources/app');
+const support='/Users/rafael/Library/Application Support/FITA';
+await mkdir(path.join(support,'Engine'),{recursive:true});
+for(const file of ['transcribe.py','transcribe_whisper.py','render.py','speakers.py','voices.py','remember.py','requirements-asr.lock.txt','requirements-speakers.lock.txt'])await copyFile(path.join(project,'engine',file),path.join(support,'Engine',file));
+for(const file of ['correction-memory.json','voice-library.json']){const src=path.join(project,'engine',file),dest=path.join(support,'Engine',file);if(existsSync(src)&&!existsSync(dest))await copyFile(src,dest)}
+const config={workspace:root,dataDir:path.join(support,'Recordings'),scriptsDir:path.join(support,'Engine'),python:path.join(support,'Runtime/asr/bin/python'),diarPython:path.join(support,'Runtime/speakers/bin/python'),modelCache:path.join(support,'Models')};
+for(const target of [config.python,config.diarPython,config.modelCache,config.dataDir])if(!existsSync(target))throw Error('Runtime local ausente: '+target);
+await writeFile(path.join(appRoot,'desktop/config.json'),JSON.stringify(config,null,2));
+execFileSync('codesign',['--force','--deep','--sign','-',bundle],{stdio:'inherit'});
+execFileSync('codesign',['--verify','--deep','--strict',bundle],{stdio:'inherit'});
+const destination='/Applications/FITA.app',staging='/Applications/.FITA-next.app',backup='/Applications/.FITA-previous.app';
+if(existsSync(staging))await rm(staging,{recursive:true});
+execFileSync('ditto',[bundle,staging]);
+execFileSync('codesign',['--verify','--deep','--strict',staging]);
+if(existsSync(backup))await rm(backup,{recursive:true});
+if(existsSync(destination))await rename(destination,backup);
+try{await rename(staging,destination)}catch(error){if(existsSync(backup))await rename(backup,destination);throw error}
+console.log('FITA / instalado em Aplicativos. Dados e fila preservados. A versão nova abre no próximo lançamento.');

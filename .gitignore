@@ -1,0 +1,13 @@
+node_modules/
+data/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+!.env.example
+desktop/config.json
+engine/voice-library.json
+engine/correction-memory.json
+*.log
+*.embeddings.json
