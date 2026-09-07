@@ -8,3 +8,5 @@ body{background:#101319}.workspace{background:#11191c88}aside{background:#0b1216
 .brand .tape{white-space:nowrap;font-size:22px;letter-spacing:1px}
 
 .speaker-select{padding:5px 9px;border:1px solid #829771;background:#192326;color:var(--sage,#cbd8ad);font:inherit;text-align:left;cursor:pointer}.speaker-select:hover,.speaker-select:focus-visible{background:#344339;outline:2px solid #cbd8ad}.person-stats{display:flex;gap:24px;flex-wrap:wrap;margin:18px 0}.person-stats strong{display:block;font-size:25px;color:#dce7c4}.person-excerpt{padding:14px 0;border-bottom:1px solid #344044}.person-excerpt p{line-height:1.6}.person-card{margin-bottom:20px}#assign-choices{flex-wrap:wrap;margin:16px 0}
+
+.checkline[hidden]{display:none!important}

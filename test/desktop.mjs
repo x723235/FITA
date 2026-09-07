@@ -12,7 +12,8 @@ const data=root+'/work/ui-test-data';await mkdir(data+'/test-one',{recursive:tru
 await copyFile(root+'/work/recording.wav',data+'/test-one/audio.wav');
 const job={id:'test-one',title:'Teste de revisão.m4a',status:'done',phase:'Pronta para revisar',audio:data+'/test-one/audio.wav',createdAt:new Date().toISOString(),speakers:2,languages:['Portuguese','English']};
 await writeFile(data+'/queue.json',JSON.stringify({paused:true,jobs:[job]}));
-await writeFile(data+'/test-one/transcript.json',JSON.stringify({segments:[{start:0,end:5,speaker:'SPEAKER_00',text:'Texto original de teste.'},{start:6,end:6.2,speaker:'SPEAKER_01',text:'Second speaker, switching languages.'}],asr:{text:'original'},diarization:{num_speakers:2}}));
+await writeFile(data+'/test-one/transcript.json',JSON.stringify({segments:[{start:0,end:5,speaker:'SPEAKER_00',text:'Texto original de teste.'},{start:6,end:6.2,speaker:'SPEAKER_01',text:'Second speaker, switching languages.'},{start:8,end:12,speaker:'SPEAKER_00',text:'Outra fala da primeira voz.'}],asr:{text:'original'},diarization:{num_speakers:2}}));
+await writeFile(data+'/test-one/labels.json','[]');
 const app=await electron.launch({executablePath:'/Users/rafael/Documents/Codex/2026-09-06/any-x20/atlas/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron',args:[root+'/outputs/fita'],env:{...process.env,FITA_DATA:data,FITA_SCRIPTS:data+'/scripts'}});
 try{
 const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -23,7 +24,7 @@ await page.waitForFunction(()=>document.querySelector('.segment p')?.textContent
 assert.equal(JSON.parse(await readFile(data+'/test-one/transcript.json')).segments[0].text,'Texto original de teste.');
 assert.equal(JSON.parse(await readFile(data+'/test-one/edits.json'))[0].text,'Correção confirmada.');
 const libraryBefore=await readFile(data+'/scripts/voice-library.json','utf8').catch(()=>null);
-await page.locator('.speaker-select[data-assign="1"]').click();await page.locator('#assign-form [name=person]').fill('Pessoa de teste');await page.locator('#assign-form [type=submit]').click();
+await page.locator('.speaker-select[data-assign="1"]').click();assert.equal(await page.locator('#assign-group-label').isVisible(),false);assert.equal(await page.locator('#assign-learn-label').isVisible(),false);await page.locator('#assign-form [name=person]').fill('Pessoa de teste');await page.locator('#assign-form [type=submit]').click();
 await page.waitForFunction(()=>document.querySelectorAll('.speaker')[1]?.textContent.includes('Pessoa de teste'));
 await page.locator('.speaker-select[data-assign="1"]').click();await page.locator('#assign-form [name=person]').fill('Nome corrigido');await page.locator('#assign-form [type=submit]').click();
 await page.waitForFunction(()=>document.querySelectorAll('.speaker')[1]?.textContent.includes('Nome corrigido'));
@@ -41,6 +42,7 @@ await page.locator('#search').fill('inexistente');assert.equal(await page.locato
 await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]})},root+'/outputs/fita/data/weser-187/original.m4a');
 await page.locator('#import').click();await page.waitForFunction(()=>document.querySelectorAll('.record').length===2);await page.locator('#import').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('repetida'));assert.equal(await page.locator('.record').count(),2);
 await page.locator('.record').filter({hasText:'Teste de revisão'}).click();
+await page.locator('.speaker-select[data-assign="0"]').click();assert.equal(await page.locator('#assign-form [name=group]').isChecked(),true);await page.locator('#assign-form [name=person]').fill('Grupo confirmado');await page.locator('#assign-form [type=submit]').click();await page.waitForFunction(()=>document.querySelectorAll('.speaker')[2]?.textContent.includes('Grupo confirmado'));const grouped=JSON.parse(await readFile(data+'/test-one/labels.json'));assert.equal(grouped.filter(l=>l.name==='Grupo confirmado').length,2);assert.equal(await readFile(data+'/scripts/voice-library.json','utf8').catch(()=>null),libraryBefore);
 await page.locator('[data-action=retranscribe]').click();
 await page.waitForFunction(()=>document.querySelector('h1')?.textContent.includes('nova versão'));
 const after=JSON.parse(await readFile(data+'/queue.json'));const newer=after.jobs.find(j=>j.sourceJob==='test-one');assert.ok(newer);assert.equal(newer.model,'mlx-community/whisper-large-v3-mlx');assert.equal(newer.status,'queued');assert.equal(JSON.parse(await readFile(data+'/test-one/edits.json'))[0].text,'Correção confirmada.');

@@ -2,14 +2,14 @@
 
 App local de transcrição e memória de vozes para o Mac de Rafael.
 
-Abra **FITA** em Aplicativos. O pacote também está em `../FITA-darwin-arm64/FITA.app`.
+Abra **FITA** em Aplicativos. O código principal fica em `~/Projects/FITA`.
 
 ## Uso
 
 - **Gravações:** importar vários arquivos, detectar duplicatas e manter o histórico.
 - **Fila:** acompanhar etapas, pausar os próximos itens, cancelar e tentar novamente.
-- **Revisar:** ouvir o original, pular para um trecho, corrigir texto, atribuir uma pessoa a qualquer trecho e exportar. **Guardar exemplo de voz** é uma ação separada para trechos limpos de 3–30 segundos. Atribuições manuais não treinam a memória; renomear um trecho atualiza o nome exibido e exportado.
-- **Pessoas:** biblioteca de exemplos confirmados, utilizada para sugestões em novas gravações.
+- **Revisar:** ouvir o original, pular para um trecho, corrigir texto, atribuir uma pessoa a qualquer trecho e exportar. É possível atribuir os trechos sem nome de um mesmo grupo em uma confirmação. Um exemplo limpo de 3–30 segundos pode ser guardado no mesmo diálogo, mediante confirmação explícita, ou com **Guardar exemplo de voz**. Atribuições sem exemplo não treinam a memória; renomear um trecho atualiza o nome exibido e exportado.
+- **Pessoas:** biblioteca de pessoas atribuídas e exemplos confirmados, com gravações, trechos, tempo de fala, amostras e acesso para ouvir. Ao guardar exemplos, as sugestões são atualizadas também nas gravações prontas. **Reconhecer vozes** permite repetir a comparação; representações de áudio são reutilizadas do cache.
 - **Ajustes:** ver o motor, guardar vocabulário e reduzir a atmosfera Aura.
 
 Atalhos: `⌘O` importa; `⌘1–4` muda de seção; `↑↓` percorre gravações; `Enter` abre; `Espaço` toca/pausa; `/` busca; `Esc` volta; `?` ajuda. Menus nativos do Mac têm as mesmas funções principais.
@@ -34,16 +34,16 @@ Referências técnicas: [Qwen3-ASR](https://huggingface.co/Qwen/Qwen3-ASR-1.7B),
 
 ## Dados e limites da primeira versão
 
-`~/Library/Application Support/FITA/Recordings/queue.json` guarda a fila do app instalado. Cada gravação tem uma pasta própria com original, transcrição, timestamps, separação de vozes, correções e identidades confirmadas por intervalo. O texto original permanece separado das edições. A biblioteca e memória de vocabulário do app instalado estão em `~/Library/Application Support/FITA/Engine`. O diretório `../local-transcriber` contém os scripts de desenvolvimento.
+`~/Library/Application Support/FITA/Recordings/queue.json` guarda a fila do app instalado. Cada gravação tem uma pasta própria com original, transcrição, timestamps, separação de vozes, correções e identidades confirmadas por intervalo. O texto original permanece separado das edições. A biblioteca e memória de vocabulário do app instalado estão em `~/Library/Application Support/FITA/Engine`. O diretório `engine/` contém os scripts de desenvolvimento.
 
-A identidade confirmada vale para o trecho escolhido; não declara automaticamente que todo um agrupamento de voz está correto. A comparação futura sugere nomes, mas não confirma identidades. Mais exemplos podem ajudar; o ganho ainda precisa de avaliação em gravações reais.
+A identidade pode ser confirmada para um trecho ou para os trechos ainda sem nome do grupo sugerido. A opção de grupo preserva outras atribuições e nunca agrupa UNASSIGNED; os grupos do modelo podem conter erros. A comparação futura sugere nomes, mas não confirma identidades. Mais exemplos podem ajudar; o ganho ainda precisa de avaliação em gravações reais.
 
 A cobertura multilíngue não significa qualidade uniforme nem validação de todos os idiomas. Vozes sobrepostas, mídia ao fundo, nomes e mudanças de língua podem gerar erros. Esta versão de diarize não modela sobreposição. A alternativa pyannote Community-1 depende de acesso Hugging Face e está no backlog para comparação.
 
 Ao encerrar o app, uma transcrição iniciada pelo próprio app é interrompida e permanece disponível para tentar novamente. A primeira gravação desta sessão foi iniciada externamente e é acompanhada pelo app até concluir. Retomada por checkpoint e execução em segundo plano estão no backlog.
 
-Confira `../FITA-PHASES.md` para Phase 1, Phase 2 / Karaokê e Phase 3 / áudios de cinco horas ou mais. Esses itens não são recursos já implementados.
+Confira `PHASES.md` para Phase 1, Phase 2 / Karaokê e Phase 3 / áudios de cinco horas ou mais. Esses itens não são recursos já implementados.
 
 ## Auditoria e troca do motor
 
-A auditoria da gravação original está em `../accuracy-audit/RELATORIO.md`. O Whisper melhorou leituras específicas e também omitiu/alterou palavras. Não há escuta humana nem precisão medida contra referência. VibeVoice-ASR está em avaliação separada, sem ser promovido por tamanho ou marketing. Cinco horas ou mais ficam para Phase 3.
+A auditoria da gravação original permanece no workspace local de processamento, fora deste repositório. O Whisper melhorou leituras específicas e também omitiu/alterou palavras. Não há escuta humana nem precisão medida contra referência. VibeVoice-ASR está em avaliação separada, sem ser promovido por tamanho ou marketing. Cinco horas ou mais ficam para Phase 3.
