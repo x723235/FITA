@@ -1,4 +1,5 @@
 import {speakerLibrary,assignmentTargets,similarSuggestionTargets} from '../desktop/people.mjs';
+import {elapsedTime,wallClock,wallTimestamp} from '../desktop/time.mjs';
 import {_electron as electron} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
@@ -15,10 +16,13 @@ assert.deepEqual(similarSuggestionTargets(
  {matches:{SPEAKER_00:{candidate:'Cantora'},SPEAKER_01:{candidate:'Cantora'},SPEAKER_02:{candidate:'Outra'}}},
  'Cantora'
 ),[0]);
+const recordedAt='2026-09-07T18:57:38.000Z';
+assert.equal(elapsedTime(924.8),'15:24');
+assert.equal(wallTimestamp(recordedAt,0).endsWith(` ${wallClock(recordedAt,0)}`),true);
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const data=root+'/work/ui-test-data';await mkdir(data+'/test-one',{recursive:true});await mkdir(data+'/scripts',{recursive:true});await writeFile(data+'/scripts/correction-memory.json',JSON.stringify({vocabulary:[],corrections:[]}));
 await writeFile(data+'/test-one/audio.wav',Buffer.from('UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=','base64'));
-const job={id:'test-one',title:'Teste de revisão.m4a',status:'done',phase:'Pronta para revisar',audio:data+'/test-one/audio.wav',createdAt:new Date().toISOString(),speakers:3,languages:['Portuguese','English']};
+const job={id:'test-one',title:'Teste de revisão.m4a',status:'done',phase:'Pronta para revisar',audio:data+'/test-one/audio.wav',createdAt:new Date().toISOString(),recordedAt,recordedAtSource:'file_birthtime',speakers:3,languages:['Portuguese','English']};
 await writeFile(data+'/queue.json',JSON.stringify({paused:true,jobs:[job]}));
 await writeFile(data+'/test-one/transcript.json',JSON.stringify({segments:[{start:0,end:5,speaker:'SPEAKER_00',text:'Texto original de teste.'},{start:6,end:6.2,speaker:'SPEAKER_01',text:'Second speaker, switching languages.'},{start:8,end:12,speaker:'SPEAKER_00',text:'Outra fala da primeira voz.'},{start:13,end:17,speaker:'SPEAKER_02',text:'Uma voz parecida sugerida pelo modelo.'}],asr:{text:'original'},diarization:{num_speakers:3}}));
 await writeFile(data+'/test-one/labels.json','[]');await writeFile(data+'/scripts/voice-library.json',JSON.stringify({profiles:{}}));await writeFile(data+'/test-one/matches.json',JSON.stringify({matches:{SPEAKER_00:{candidate:'Grupo confirmado'},SPEAKER_02:{candidate:'Grupo confirmado'}}}));
@@ -28,6 +32,7 @@ try{
 const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.locator('.record').waitFor();await page.screenshot({path:root+'/work/ui-initial.png'});
 await page.locator('.record').click();await page.locator('.segment').first().waitFor();await page.waitForFunction(()=>document.querySelector('#pending-summary')?.textContent.startsWith('4 trechos'));await page.locator('#pending-only').check();
+assert.equal((await page.locator('[data-seek]').first().textContent()).includes(wallClock(recordedAt,0)),true);assert.equal(await page.locator('[data-seek]').first().getAttribute('title'),'Ouvir este trecho · posição 00:00–00:05');
 await page.locator('[data-edit="0"]').click();await page.locator('#edit-form textarea').fill('Correção confirmada.');await page.locator('#edit-form [type=submit]').click();
 await page.waitForFunction(()=>document.querySelector('.segment p')?.textContent==='Correção confirmada.');
 assert.equal(JSON.parse(await readFile(data+'/test-one/transcript.json')).segments[0].text,'Texto original de teste.');
@@ -41,8 +46,10 @@ assert.equal(await readFile(data+'/scripts/voice-library.json','utf8').catch(()=
 await page.waitForFunction(()=>document.querySelector('#pending-summary')?.textContent.startsWith('3 trechos'));await page.locator('#pending-only').check();assert.equal(await page.locator('.segment:visible').count(),3);await page.locator('#pending-only').uncheck();
 await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file})},data+'/assigned-export.json');
 await page.locator('[data-export=json]').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('exportada'));
-assert.equal(JSON.parse(await readFile(data+'/assigned-export.json')).segments[1].speaker,'Nome corrigido');
+const exported=JSON.parse(await readFile(data+'/assigned-export.json'));assert.equal(exported.segments[1].speaker,'Nome corrigido');assert.equal(exported.recordedAt,recordedAt);assert.equal(exported.segments[1].timestamp,wallTimestamp(recordedAt,6));
 assert.equal(JSON.parse(await readFile(data+'/test-one/transcript.json')).segments[1].speaker,'SPEAKER_01');
+await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file})},data+'/assigned-export.txt');
+await page.locator('[data-export=txt]').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('exportada'));assert.equal((await readFile(data+'/assigned-export.txt','utf8')).startsWith(`[${wallTimestamp(recordedAt,0)}]`),true);
 await page.locator('[data-voice="0"]').click();assert.equal(await page.locator('#voice-form [name=start]').inputValue(),'0.0');await page.keyboard.press('Escape');
 await page.locator('[data-action=reviewed]').click();await page.waitForFunction(()=>document.querySelector('[data-action=reviewed]').textContent==='Reabrir revisão');
 await page.locator('nav [data-view=people]').click();await page.getByRole('heading',{name:'Nome corrigido',exact:true}).waitFor();assert.equal(await page.locator('.person-card').count(),1);await page.getByText('Pessoa cadastrada pelas atribuições.',{exact:false}).waitFor();
