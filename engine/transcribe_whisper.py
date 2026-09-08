@@ -25,7 +25,8 @@ def transcribe(source,destination):
    if start>=duration:break
    end=min(start+WINDOW,duration);a=max(0,start-PADDING);b=min(duration,end+PADDING)
    clip=Path(temp)/'window.wav'
-   subprocess.run(['/opt/homebrew/bin/ffmpeg','-nostdin','-v','error','-y','-ss',str(a),'-i',str(source),'-t',str(b-a),'-af',FILTER,str(clip)],check=True)
+   ffmpeg=os.environ.get('FITA_FFMPEG','ffmpeg')
+   subprocess.run([ffmpeg,'-nostdin','-v','error','-y','-ss',str(a),'-i',str(source),'-t',str(b-a),'-af',FILTER,str(clip)],check=True)
    result=mlx_whisper.transcribe(str(clip),path_or_hf_repo=str(model_path),temperature=0,condition_on_previous_text=False,word_timestamps=True,no_speech_threshold=None,initial_prompt=', '.join(vocabulary[:100]) or None)
    chunks.append({'start':start,'end':end,'audio_start':a,'audio_end':b,'language':result['language'],'result':result})
    for segment in result['segments']:

@@ -20,7 +20,11 @@ Execute `build.command`. O processo testa a interface, empacota, assina localmen
 
 Cada build copia o código atual para o app instalado. Alterações entram quando a versão nova é aberta; não há reminder nem busca periódica de atualizações. O app instalado usa motor, modelos e dados em `~/Library/Application Support/FITA`. O workspace guarda o projeto e uma cópia dos resultados desta sessão. O build sincroniza os scripts do motor sem sobrescrever memórias e gravações.
 
-Este é um build local para este Mac, com Chromium incluído e dependências de inferência já instaladas na pasta de suporte do FITA. Ainda não é um instalador portátil/notarizado. O build reutiliza o Electron/packager instalado com ATLAS. O script de testes usa dados separados em `work/ui-test-data` e não corrige a gravação real.
+Este é um build local para este Mac, com Chromium incluído e dependências de inferência já instaladas na pasta de suporte do FITA. Ainda não é um instalador portátil/notarizado. As ferramentas de build e teste estão declaradas em `package.json`. O script de testes usa dados separados em `work/ui-test-data` e não corrige a gravação real.
+
+### Preparar outro checkout
+
+O Git contém apenas o código. Antes do primeiro build, instale as dependências de `package.json`, crie `desktop/config.json` a partir de `desktop/config.example.json` e prepare os runtimes locais em `~/Library/Application Support/FITA`: Python/MLX para ASR, Python para diarização, FFmpeg e o cache do modelo Whisper. O modelo `mlx-community/whisper-large-v3-mlx` é baixado para `Models` quando necessário; gravações, vozes, modelos e runtimes não entram no repositório. Veja `LOCAL-DEVELOPMENT.md` para os caminhos e dependências.
 
 ## O que roda localmente
 

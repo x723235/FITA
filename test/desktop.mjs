@@ -1,24 +1,38 @@
-import {speakerLibrary,assignmentTargets} from '../desktop/people.mjs';
-import {_electron as electron} from '/Users/rafael/Documents/Codex/2026-09-06/any-x20/atlas/node_modules/@playwright/test/index.mjs';
+import {speakerLibrary,assignmentTargets,similarSuggestionTargets} from '../desktop/people.mjs';
+import {elapsedTime,wallClock,wallTimestamp} from '../desktop/time.mjs';
+import {_electron as electron} from '@playwright/test';
 import assert from 'node:assert/strict';
-import {mkdir,writeFile,readFile,copyFile} from 'node:fs/promises';
+import {mkdir,writeFile,readFile} from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 const records=[{job:{id:'a',sha256:'same',title:'a',languages:['English']},transcript:{segments:[{start:0,end:5,text:'test'}]},labels:[{index:0,name:'Old',start:0,end:5},{index:0,name:'Correct',start:0,end:5}]},{job:{id:'b',sha256:'same',title:'b',languages:['English']},transcript:{segments:[{start:2,end:7,text:'test'}]},labels:[{index:0,name:'Correct',start:2,end:7}]}];
 const library=speakerLibrary(records,{profiles:{}});assert.equal(library.length,1);assert.equal(library[0].name,'Correct');assert.equal(library[0].recordingCount,1);assert.equal(library[0].seconds,7);assert.equal(library[0].segmentCount,2);assert.equal(library[0].exampleCount,0);
 assert.deepEqual(assignmentTargets([{speaker:'SPEAKER_00'},{speaker:'SPEAKER_00'},{speaker:'SPEAKER_00'},{speaker:'UNASSIGNED'}],[{index:2,name:'Keep'}],0,true),[0,1]);
 assert.deepEqual(assignmentTargets([{speaker:'UNASSIGNED'},{speaker:'UNASSIGNED'}],[],0,true),[0]);
 assert.deepEqual(assignmentTargets([{speaker:'SPEAKER_00'},{speaker:'SPEAKER_00'}],[],0,false),[0]);
-const root='/Users/rafael/Documents/Codex/2026-09-07/tra';
+assert.deepEqual(similarSuggestionTargets(
+ [{speaker:'SPEAKER_00',start:0,end:1},{speaker:'SPEAKER_01',start:2,end:3},{speaker:'SPEAKER_02',start:4,end:5},{speaker:'UNASSIGNED',start:6,end:7}],
+ [{index:1,name:'Já confirmado'}],
+ {matches:{SPEAKER_00:{candidate:'Cantora'},SPEAKER_01:{candidate:'Cantora'},SPEAKER_02:{candidate:'Outra'}}},
+ 'Cantora'
+),[0]);
+const recordedAt='2026-09-07T18:57:38.000Z';
+assert.equal(elapsedTime(924.8),'15:24');
+assert.equal(wallTimestamp(recordedAt,0).endsWith(` ${wallClock(recordedAt,0)}`),true);
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const data=root+'/work/ui-test-data';await mkdir(data+'/test-one',{recursive:true});await mkdir(data+'/scripts',{recursive:true});await writeFile(data+'/scripts/correction-memory.json',JSON.stringify({vocabulary:[],corrections:[]}));
-await copyFile(root+'/work/recording.wav',data+'/test-one/audio.wav');
-const job={id:'test-one',title:'Teste de revisão.m4a',status:'done',phase:'Pronta para revisar',audio:data+'/test-one/audio.wav',createdAt:new Date().toISOString(),speakers:2,languages:['Portuguese','English']};
+await writeFile(data+'/test-one/audio.wav',Buffer.from('UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=','base64'));
+const job={id:'test-one',title:'Teste de revisão.m4a',status:'done',phase:'Pronta para revisar',audio:data+'/test-one/audio.wav',createdAt:new Date().toISOString(),recordedAt,recordedAtSource:'file_birthtime',speakers:3,languages:['Portuguese','English']};
 await writeFile(data+'/queue.json',JSON.stringify({paused:true,jobs:[job]}));
-await writeFile(data+'/test-one/transcript.json',JSON.stringify({segments:[{start:0,end:5,speaker:'SPEAKER_00',text:'Texto original de teste.'},{start:6,end:6.2,speaker:'SPEAKER_01',text:'Second speaker, switching languages.'},{start:8,end:12,speaker:'SPEAKER_00',text:'Outra fala da primeira voz.'}],asr:{text:'original'},diarization:{num_speakers:2}}));
-await writeFile(data+'/test-one/labels.json','[]');await writeFile(data+'/scripts/voice-library.json',JSON.stringify({profiles:{}}));await writeFile(data+'/test-one/matches.json',JSON.stringify({matches:{}}));
-const app=await electron.launch({executablePath:'/Users/rafael/Documents/Codex/2026-09-06/any-x20/atlas/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron',args:[root+'/outputs/fita'],env:{...process.env,FITA_DATA:data,FITA_SCRIPTS:data+'/scripts'}});
+await writeFile(data+'/test-one/transcript.json',JSON.stringify({segments:[{start:0,end:5,speaker:'SPEAKER_00',text:'Texto original de teste.'},{start:6,end:6.2,speaker:'SPEAKER_01',text:'Second speaker, switching languages.'},{start:8,end:12,speaker:'SPEAKER_00',text:'Outra fala da primeira voz.'},{start:13,end:17,speaker:'SPEAKER_02',text:'Uma voz parecida sugerida pelo modelo.'}],asr:{text:'original'},diarization:{num_speakers:3}}));
+await writeFile(data+'/test-one/labels.json','[]');await writeFile(data+'/scripts/voice-library.json',JSON.stringify({profiles:{}}));await writeFile(data+'/test-one/matches.json',JSON.stringify({matches:{SPEAKER_00:{candidate:'Grupo confirmado'},SPEAKER_02:{candidate:'Grupo confirmado'}}}));
+const packagedExecutable=process.env.FITA_TEST_EXECUTABLE;
+const app=await electron.launch({executablePath:packagedExecutable||path.join(root,'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'),args:packagedExecutable?[]:[root],env:{...process.env,FITA_DATA:data,FITA_SCRIPTS:data+'/scripts'}});
 try{
 const page=await app.firstWindow();const errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.locator('.record').waitFor();await page.screenshot({path:root+'/work/ui-initial.png'});
-await page.locator('.record').click();await page.locator('.segment').first().waitFor();await page.waitForFunction(()=>document.querySelector('#pending-summary')?.textContent.startsWith('3 trechos'));await page.locator('#pending-only').check();
+await page.locator('.record').click();await page.locator('.segment').first().waitFor();await page.waitForFunction(()=>document.querySelector('#pending-summary')?.textContent.startsWith('4 trechos'));await page.locator('#pending-only').check();
+assert.equal((await page.locator('[data-seek]').first().textContent()).includes(wallClock(recordedAt,0)),true);assert.equal(await page.locator('[data-seek]').first().getAttribute('title'),'Ouvir este trecho · posição 00:00–00:05');
 await page.locator('[data-edit="0"]').click();await page.locator('#edit-form textarea').fill('Correção confirmada.');await page.locator('#edit-form [type=submit]').click();
 await page.waitForFunction(()=>document.querySelector('.segment p')?.textContent==='Correção confirmada.');
 assert.equal(JSON.parse(await readFile(data+'/test-one/transcript.json')).segments[0].text,'Texto original de teste.');
@@ -29,21 +43,29 @@ await page.waitForFunction(()=>document.querySelectorAll('.speaker')[1]?.textCon
 await page.locator('#pending-only').uncheck();await page.locator('.speaker-select[data-assign="1"]').click();await page.locator('#assign-form [name=person]').fill('Nome corrigido');await page.locator('#assign-form [type=submit]').click();
 await page.waitForFunction(()=>document.querySelectorAll('.speaker')[1]?.textContent.includes('Nome corrigido'));
 assert.equal(await readFile(data+'/scripts/voice-library.json','utf8').catch(()=>null),libraryBefore);
-await page.waitForFunction(()=>document.querySelector('#pending-summary')?.textContent.startsWith('2 trechos'));await page.locator('#pending-only').check();assert.equal(await page.locator('.segment:visible').count(),2);await page.locator('#pending-only').uncheck();
+await page.waitForFunction(()=>document.querySelector('#pending-summary')?.textContent.startsWith('3 trechos'));await page.locator('#pending-only').check();assert.equal(await page.locator('.segment:visible').count(),3);await page.locator('#pending-only').uncheck();
 await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file})},data+'/assigned-export.json');
 await page.locator('[data-export=json]').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('exportada'));
-assert.equal(JSON.parse(await readFile(data+'/assigned-export.json')).segments[1].speaker,'Nome corrigido');
+const exported=JSON.parse(await readFile(data+'/assigned-export.json'));assert.equal(exported.segments[1].speaker,'Nome corrigido');assert.equal(exported.recordedAt,recordedAt);assert.equal(exported.segments[1].timestamp,wallTimestamp(recordedAt,6));
 assert.equal(JSON.parse(await readFile(data+'/test-one/transcript.json')).segments[1].speaker,'SPEAKER_01');
+await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file})},data+'/assigned-export.txt');
+await page.locator('[data-export=txt]').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('exportada'));assert.equal((await readFile(data+'/assigned-export.txt','utf8')).startsWith(`[${wallTimestamp(recordedAt,0)}]`),true);
 await page.locator('[data-voice="0"]').click();assert.equal(await page.locator('#voice-form [name=start]').inputValue(),'0.0');await page.keyboard.press('Escape');
 await page.locator('[data-action=reviewed]').click();await page.waitForFunction(()=>document.querySelector('[data-action=reviewed]').textContent==='Reabrir revisão');
 await page.locator('nav [data-view=people]').click();await page.getByRole('heading',{name:'Nome corrigido',exact:true}).waitFor();assert.equal(await page.locator('.person-card').count(),1);await page.getByText('Pessoa cadastrada pelas atribuições.',{exact:false}).waitFor();
 await page.locator('[data-view=settings]').click();const wasQuiet=await page.locator('body').evaluate(el=>el.classList.contains('quiet'));await page.locator('#aura-toggle').click();assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('quiet')),!wasQuiet);
 await page.locator('nav [data-view=recordings]').click();await page.keyboard.press('/');assert.equal(await page.locator('#search').evaluate(el=>el===document.activeElement),true);
 await page.locator('#search').fill('inexistente');assert.equal(await page.locator('.record').count(),0);await page.locator('#search').fill('');await page.locator('.record').waitFor();
-await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]})},root+'/outputs/fita/data/weser-187/original.m4a');
+await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]})},data+'/test-one/audio.wav');
 await page.locator('#import').click();await page.waitForFunction(()=>document.querySelectorAll('.record').length===2);await page.locator('#import').click();await page.waitForFunction(()=>document.querySelector('#toast').textContent.includes('repetida'));assert.equal(await page.locator('.record').count(),2);
 await page.locator('.record').filter({hasText:'Teste de revisão'}).click();
-await page.locator('.speaker-select[data-assign="0"]').click();assert.equal(await page.locator('#assign-form [name=group]').isChecked(),true);await page.locator('#assign-form [name=person]').fill('Grupo confirmado');await page.locator('#assign-form [type=submit]').click();await page.waitForFunction(()=>document.querySelectorAll('.speaker')[2]?.textContent.includes('Grupo confirmado'));const grouped=JSON.parse(await readFile(data+'/test-one/labels.json'));assert.equal(grouped.filter(l=>l.name==='Grupo confirmado').length,2);assert.equal(await readFile(data+'/scripts/voice-library.json','utf8').catch(()=>null),libraryBefore);
+await page.evaluate(()=>{window.__mediaCalls={play:0,pause:0};HTMLMediaElement.prototype.play=function(){window.__mediaCalls.play++;return Promise.resolve()};HTMLMediaElement.prototype.pause=function(){window.__mediaCalls.pause++}});
+const firstSeek=page.locator('[data-seek]').first();const firstEnd=Number(await firstSeek.getAttribute('data-seek-end'));await firstSeek.click();await page.locator('#audio').evaluate((audio,end)=>{Object.defineProperty(audio,'currentTime',{configurable:true,value:end,writable:true});audio.dispatchEvent(new Event('timeupdate'))},firstEnd);assert.deepEqual(await page.evaluate(()=>window.__mediaCalls),{play:1,pause:1});await page.locator('#back').click();assert.deepEqual(await page.evaluate(()=>window.__mediaCalls),{play:1,pause:2});
+await page.locator('.record').filter({hasText:'Teste de revisão'}).click();
+await page.evaluate(()=>{window.__lateMetadata=[];const nativeAdd=HTMLMediaElement.prototype.addEventListener;HTMLMediaElement.prototype.addEventListener=function(type,listener,options){if(type==='loadedmetadata'){window.__lateMetadata.push({audio:this,listener});return}return nativeAdd.call(this,type,listener,options)};Object.defineProperty(document.querySelector('#audio'),'paused',{configurable:true,get:()=>false})});
+await page.locator('.speaker-select[data-assign="0"]').click();assert.equal(await page.locator('#assign-form [name=group]').isChecked(),true);assert.equal(await page.locator('#assign-similar-label').isVisible(),true);await page.locator('#assign-form [name=similar]').check();await page.locator('#assign-form [type=submit]').click();await page.waitForFunction(()=>document.querySelectorAll('.speaker')[3]?.textContent.includes('Grupo confirmado'));const grouped=JSON.parse(await readFile(data+'/test-one/labels.json'));assert.equal(grouped.filter(l=>l.name==='Grupo confirmado').length,3);assert.equal(grouped.filter(l=>l.source==='confirmed_similar_suggestion').length,1);assert.equal(await readFile(data+'/scripts/voice-library.json','utf8').catch(()=>null),libraryBefore);
+await page.locator('#back').click();const latePlays=await page.evaluate(()=>{window.__mediaCalls.play=0;for(const {audio,listener} of window.__lateMetadata)listener.call(audio,new Event('loadedmetadata'));return window.__mediaCalls.play});assert.equal(latePlays,0);
+await page.locator('.record').filter({hasText:'Teste de revisão'}).click();
 await page.waitForFunction(()=>document.querySelector('#pending-summary')?.textContent.startsWith('0 trechos'));await page.locator('#pending-only').check();assert.equal(await page.locator('.segment:visible').count(),0);await page.locator('#pending-empty').waitFor();await page.locator('#pending-only').uncheck();
 await writeFile(data+'/scripts/voice-library.json',JSON.stringify({profiles:{'Grupo confirmado':{examples:[{start:0,end:5}]}}}));
 await writeFile(data+'/test-one/matches.json',JSON.stringify({matches:{SPEAKER_00:{candidate:'Grupo confirmado'}}}));
@@ -54,5 +76,5 @@ await page.locator('[data-action=retranscribe]').click();
 await page.waitForFunction(()=>document.querySelector('h1')?.textContent.includes('nova versão'));
 const after=JSON.parse(await readFile(data+'/queue.json'));const newer=after.jobs.find(j=>j.sourceJob==='test-one');assert.ok(newer);assert.equal(newer.model,'mlx-community/whisper-large-v3-mlx');assert.equal(newer.status,'queued');assert.equal(JSON.parse(await readFile(data+'/test-one/edits.json'))[0].text,'Correção confirmada.');
 assert.equal(await page.evaluate(()=>typeof window.require),'undefined');assert.deepEqual(errors,[]);
-console.log('PASS: import-ready list, review, preserved original, corrections, voice confirmation UI, reviewed state, navigation, search, appearance, renderer isolation.');
+console.log('PASS: import-ready list, review, preserved original, corrections, grouped/similar voice confirmation, bounded segment playback, single active audio, reviewed state, navigation, search, appearance, renderer isolation.');
 }finally{await app.close()}

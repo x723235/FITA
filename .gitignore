@@ -1,5 +1,7 @@
 node_modules/
 data/
+outputs/
+work/
 __pycache__/
 *.pyc
 .DS_Store

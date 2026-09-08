@@ -1,4 +1,5 @@
-import {speakerLibrary,assignmentTargets} from './people.mjs';
+import {speakerLibrary,assignmentTargets,similarSuggestionTargets} from './people.mjs';
+import {wallTimestamp} from './time.mjs';
 import {app,BrowserWindow,ipcMain,dialog,Menu,powerSaveBlocker} from 'electron';
 import {readFile,writeFile,mkdir,copyFile,rename,stat} from 'node:fs/promises';
 import {existsSync,createReadStream} from 'node:fs';
@@ -13,15 +14,17 @@ const ROOT=process.env.FITA_WORKSPACE||config.workspace;
 const DATA=process.env.FITA_DATA||config.dataDir||path.join(ROOT,'outputs/fita/data');
 const SCRIPTS=process.env.FITA_SCRIPTS||config.scriptsDir||path.join(ROOT,'outputs/local-transcriber');
 if(config.modelCache&&!process.env.FITA_DATA)process.env.HF_HOME=config.modelCache;
-process.env.PATH=['/opt/homebrew/bin','/usr/local/bin',process.env.PATH].filter(Boolean).join(':');
 const PY=config.python||path.join(ROOT,'work/venv/bin/python');
 const DPY=config.diarPython||path.join(ROOT,'work/diarize-venv/bin/python');
-const FFMPEG='/opt/homebrew/bin/ffmpeg';
+const FFMPEG=config.ffmpeg||path.join(app.getPath('appData'),'FITA','Runtime','bin','ffmpeg');
+process.env.FITA_FFMPEG=FFMPEG;
+process.env.PATH=[path.dirname(FFMPEG),'/opt/homebrew/bin','/usr/local/bin',process.env.PATH].filter(Boolean).join(':');
 if(process.env.FITA_DATA)app.setPath('userData',path.join(DATA,'window'));
 let state={paused:false,jobs:[]};
 let win,child=null,active=null,locked=false,writeTail=Promise.resolve();
 const externalAlive=pid=>{try{const cmd=execFileSync('/bin/ps',['-p',String(pid),'-o','command='],{encoding:'utf8'});return /outputs\/local-transcriber\/(transcribe|speakers)\.py/.test(cmd)}catch{return false}};
 const pending=(j)=>['queued','running'].includes(j.status);
+const recordingDate=meta=>Number.isFinite(meta?.birthtimeMs)&&meta.birthtimeMs>0?meta.birthtime.toISOString():null;
 const jobDir=id=>path.join(DATA,id);
 const find=id=>{const j=state.jobs.find(j=>j.id===id);if(!j)throw Error('Gravação não encontrada.');return j};
 function save(){const snapshot=JSON.stringify(state,null,2);writeTail=writeTail.then(async()=>{const temp=path.join(DATA,'queue.tmp');await writeFile(temp,snapshot);await rename(temp,path.join(DATA,'queue.json'));win?.webContents.send('changed')});return writeTail}
@@ -72,7 +75,7 @@ async function performImport(files){if(!Array.isArray(files)||files.length>500)t
  for(const file of files){if(typeof file!=='string'||!['.m4a','.mp3','.wav','.flac','.ogg','.mp4','.aac'].includes(path.extname(file).toLowerCase()))throw Error('Escolha um arquivo de áudio suportado.');
  const meta=await stat(file);if(!meta.isFile())continue;const sha=await hash(file);if(state.jobs.some(j=>j.sha256===sha)){duplicates++;continue}
  const id=randomUUID();const dir=jobDir(id);await mkdir(dir);const audio=path.join(dir,'original'+path.extname(file));await copyFile(file,audio);
- state.jobs.push({id,title:path.basename(file),audio,sha256:sha,status:'queued',phase:'Aguardando sua vez',model:'mlx-community/whisper-large-v3-mlx',createdAt:new Date().toISOString(),bytes:meta.size,progress:0});added++;
+ state.jobs.push({id,title:path.basename(file),audio,sha256:sha,status:'queued',phase:'Aguardando sua vez',model:'mlx-community/whisper-large-v3-mlx',createdAt:new Date().toISOString(),recordedAt:recordingDate(meta),recordedAtSource:'file_birthtime',bytes:meta.size,progress:0});added++;
  }await save();tick();return {added,duplicates}}
 async function pick(){const r=await dialog.showOpenDialog(win,{properties:['openFile','multiSelections'],filters:[{name:'Áudio',extensions:['m4a','mp3','wav','flac','ogg','mp4','aac']}]});return r.canceled?{added:0,duplicates:0}:importPaths(r.filePaths)}
 function ipc(name,handler){ipcMain.handle(name,(event,...args)=>{if(event.sender!==win?.webContents||event.senderFrame!==win.webContents.mainFrame)throw Error('Origem inválida');return handler(...args)})}
@@ -82,7 +85,7 @@ ipc('detail',async id=>{const job=find(id);const dir=jobDir(id);return {job,tran
 ipc('action',async({action,id})=>{
  if(action==='pause'){state.paused=!state.paused;await save();tick();return}
  const j=find(id);
- if(action==='retranscribe'&&j.status==='done'){const nextId=randomUUID();const dir=jobDir(nextId);await mkdir(dir);const audio=path.join(dir,'original'+path.extname(j.audio));await copyFile(j.audio,audio);state.jobs.push({id:nextId,title:path.parse(j.title).name+' · nova versão'+path.extname(j.audio),audio,sha256:j.sha256,sourceJob:j.id,status:'queued',phase:'Aguardando sua vez',model:'mlx-community/whisper-large-v3-mlx',createdAt:new Date().toISOString(),bytes:j.bytes,progress:0});await save();tick();return {id:nextId}}
+ if(action==='retranscribe'&&j.status==='done'){const nextId=randomUUID();const dir=jobDir(nextId);await mkdir(dir);const audio=path.join(dir,'original'+path.extname(j.audio));await copyFile(j.audio,audio);state.jobs.push({id:nextId,title:path.parse(j.title).name+' · nova versão'+path.extname(j.audio),audio,sha256:j.sha256,sourceJob:j.id,status:'queued',phase:'Aguardando sua vez',model:'mlx-community/whisper-large-v3-mlx',createdAt:new Date().toISOString(),recordedAt:j.recordedAt,recordedAtSource:j.recordedAtSource,bytes:j.bytes,progress:0});await save();tick();return {id:nextId}}
  if(action==='retry'&&['error','cancelled'].includes(j.status)){j.status='queued';delete j.external;delete j.error;j.progress=0}
  else if(action==='cancel'&&pending(j)){j.status='cancelled';j.phase='Cancelada';if(j.external){for(const pid of j.pids){if(externalAlive(pid)){try{process.kill(pid,'SIGTERM')}catch{}}}delete j.external}else if(active===id)child?.kill('SIGTERM')}
  else if(action==='first'&&j.status==='queued'){state.jobs=state.jobs.filter(x=>x.id!==id);state.jobs.unshift(j)}
@@ -90,13 +93,14 @@ ipc('action',async({action,id})=>{
  await save();tick();
 });
 ipc('correct',async({id,index,text})=>{const j=find(id);if(j.status!=='done'||!Number.isInteger(index)||typeof text!=='string'||text.length>20000)throw Error('Correção inválida');const dir=jobDir(id),t=await json(path.join(dir,'transcript.json'));if(!t.segments[index])throw Error('Trecho inválido');const edits=await json(path.join(dir,'edits.json'),{});edits[index]={text,original:t.segments[index].text,at:new Date().toISOString()};await writeFile(path.join(dir,'edits.json'),JSON.stringify(edits,null,2));j.reviewed=false;await save();return edits});
-ipc('assign',async({id,index,name,group=false})=>{
+ipc('assign',async({id,index,name,group=false,similar=false})=>{
  const j=find(id);name=String(name||'').trim();const dir=jobDir(id),t=await json(path.join(dir,'transcript.json'));
  if(j.status!=='done'||!Number.isInteger(index)||!t?.segments[index]||!name||name.length>100)throw Error('Escolha um trecho e informe o nome da pessoa.');
- const segment=t.segments[index],file=path.join(dir,'labels.json'),labels=await json(file,[]);
- const targets=assignmentTargets(t.segments,labels,index,group);
- for(const i of targets){const s=t.segments[i];labels.push({index:i,name,start:s.start,end:s.end,confirmedAt:new Date().toISOString(),source:i===index?'manual_assignment':'confirmed_group',seedIndex:index})}
- await writeFile(file,JSON.stringify(labels,null,2));j.reviewed=false;await save();return {count:targets.length};
+ const segment=t.segments[index],file=path.join(dir,'labels.json'),labels=await json(file,[]),matches=await json(path.join(dir,'matches.json'),{matches:{}});
+ const targets=new Set(assignmentTargets(t.segments,labels,index,group));
+ if(similar)for(const i of similarSuggestionTargets(t.segments,labels,matches,name))targets.add(i);
+ for(const i of targets){const s=t.segments[i];const suggested=similar&&s.speaker!==segment.speaker&&matches.matches?.[s.speaker]?.candidate===name;labels.push({index:i,name,start:s.start,end:s.end,confirmedAt:new Date().toISOString(),source:i===index?'manual_assignment':suggested?'confirmed_similar_suggestion':'confirmed_group',seedIndex:index})}
+ await writeFile(file,JSON.stringify(labels,null,2));j.reviewed=false;await save();return {count:targets.size};
 });
 let voiceBusy=false;
 async function voiceProcess(args){await new Promise((resolve,reject)=>{const p=spawn(DPY,[path.join(SCRIPTS,'voices.py'),...args],{stdio:['ignore','pipe','pipe']});let msg='';p.stderr.on('data',x=>msg=(msg+x).slice(-2000));p.once('error',reject);p.on('close',c=>c===0?resolve():reject(Error(msg||'Não foi possível comparar vozes.')))})}
@@ -112,8 +116,8 @@ ipc('enroll',async({id,name,start,end,confirmed})=>{
  }finally{voiceBusy=false}
 });
 ipc('remember',async({heard,correct,source})=>{if(!String(correct||'').trim()||correct.length>150)throw Error('Use um nome ou termo de até 150 caracteres.');await new Promise((resolve,reject)=>{const p=spawn(PY,[path.join(SCRIPTS,'remember.py'),String(heard||''),correct,String(source||'Confirmado no FITA')]);p.once('error',reject);p.on('close',c=>c===0?resolve():reject(Error('Não foi possível salvar.')))});await save()});
-ipc('export',async({id,format})=>{const j=find(id);if(!['txt','json','md'].includes(format)||j.status!=='done')throw Error('Transcrição ainda indisponível');const dir=jobDir(id);const t=await json(path.join(dir,'transcript.json')),edits=await json(path.join(dir,'edits.json'),{});const labels=await json(path.join(dir,'labels.json'),[]);const segments=t.segments.map((s,i)=>({...s,speaker:[...labels].reverse().find(l=>l.index!=null?l.index===i:l.start<=s.start+.11&&l.end>=s.end-.11)?.name??s.speaker,text:edits[i]?.text??s.text}));const result=await dialog.showSaveDialog(win,{defaultPath:j.title.replace(/\.[^.]+$/,'')+'.'+format});if(result.canceled)return;
- const contents=format==='json'?JSON.stringify({...t,segments,corrections:edits},null,2):segments.map(s=>`[${Math.floor(s.start/60)}:${String(Math.floor(s.start%60)).padStart(2,'0')}] ${s.speaker}\n${s.text}`).join('\n\n');await writeFile(result.filePath,contents);return true});
+ipc('export',async({id,format})=>{const j=find(id);if(!['txt','json','md'].includes(format)||j.status!=='done')throw Error('Transcrição ainda indisponível');const dir=jobDir(id);const t=await json(path.join(dir,'transcript.json')),edits=await json(path.join(dir,'edits.json'),{});const labels=await json(path.join(dir,'labels.json'),[]);const segments=t.segments.map((s,i)=>({...s,timestamp:wallTimestamp(j.recordedAt,s.start),endTimestamp:wallTimestamp(j.recordedAt,s.end),speaker:[...labels].reverse().find(l=>l.index!=null?l.index===i:l.start<=s.start+.11&&l.end>=s.end-.11)?.name??s.speaker,text:edits[i]?.text??s.text}));const result=await dialog.showSaveDialog(win,{defaultPath:j.title.replace(/\.[^.]+$/,'')+'.'+format});if(result.canceled)return;
+ const contents=format==='json'?JSON.stringify({...t,recordedAt:j.recordedAt,recordedAtSource:j.recordedAtSource,segments,corrections:edits},null,2):segments.map(s=>`[${s.timestamp}] ${s.speaker}\n${s.text}`).join('\n\n');await writeFile(result.filePath,contents);return true});
 
 if(!app.requestSingleInstanceLock())app.quit();else{
 app.on('second-instance',()=>{win?.show();win?.focus()});
@@ -124,7 +128,10 @@ Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'FITA',submenu:[{role:'ab
 await win.loadFile(path.join(HERE,'index.html'));
 await mkdir(DATA,{recursive:true});
 try{state=JSON.parse(await readFile(path.join(DATA,'queue.json'),'utf8'))}catch(error){if(error.code==='ENOENT')state={paused:false,jobs:[]};else throw error}
-for(const j of state.jobs)if(j.status==='running'&&!j.external){j.status='error';j.phase='Interrompida ao fechar — pode tentar novamente'}
+for(const j of state.jobs){
+ if(!j.recordedAt){const meta=await stat(j.audio).catch(()=>null);j.recordedAt=recordingDate(meta);if(j.recordedAt)j.recordedAtSource='file_birthtime'}
+ if(j.status==='running'&&!j.external){j.status='error';j.phase='Interrompida ao fechar — pode tentar novamente'}
+}
 await save();setInterval(tick,2000);tick();
 app.on('window-all-closed',()=>app.quit());app.on('before-quit',()=>{child?.kill('SIGTERM')});
 }).catch(error=>{console.error(error);dialog.showErrorBox('FITA — não consegui abrir o arquivo local',error.message+'\nOs dados existentes não foram substituídos.');app.quit()});
